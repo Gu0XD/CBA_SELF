@@ -14,6 +14,7 @@ import logging
 from torchvision import transforms
 from ramp import LinearRampUp
 import torchvision.models as torch_models
+from torchvision.models.resnet import ResNet18_Weights
 import torch.nn as nn
 args = args_parser()
 
@@ -45,8 +46,11 @@ class DatasetSplit(Dataset):
 class PLUpdate(object):
     def __init__(self, args, idxs, n_classes):
         if args.model == 'Res18':
-            net = torch_models.resnet18(pretrained=args.Pretrained)
-            net.fc = nn.Linear(net.fc.weight.shape[1], n_classes)
+            if args.Pretrained:
+                net = torch_models.resnet18(weights=ResNet18_Weights.DEFAULT)
+            else:
+                net = torch_models.resnet18(weights=None)
+        net.fc = nn.Linear(net.fc.weight.shape[1], n_classes)
         self.model = net.cuda()
         self.data_idxs = idxs
         self.epoch = 0
@@ -128,7 +132,7 @@ class PLUpdate(object):
                     total = total + len(image_batch)
                     all_labels.append(label_batch)
                     image_batch = image_batch.cuda()
-                   # label_batch = label_batch.long().cuda()
+                    #label_batch = label_batch.long().cuda()
                     #self.model.train()
                     self.model.eval()
                     outputs = self.model(image_batch)
@@ -197,8 +201,14 @@ class PLUpdate(object):
                 true_label.append(label)
                 self.iter_num = self.iter_num + 1
            # print(epoch, sum(batch_loss)/len(batch_loss))
-            predicted_accuracy.append(correct_pseu/num)
-            print(f'selected number{num}, correctly predicted number{train_right.item()}, correct number{correct_pseu}, accuracy of selected number{correct_pseu/num}')
+            if num == 0:
+                predicted_accuracy.append(0)
+            else:
+                predicted_accuracy.append(correct_pseu/num)
+            if num == 0:
+                print(f'selected number{num}, correctly predicted number{train_right.item()}, correct number{correct_pseu}, accuracy of selected number{0}')
+            else:
+                print(f'selected number{num}, correctly predicted number{train_right.item()}, correct number{correct_pseu}, accuracy of selected number{correct_pseu/num}')
 
 
 
@@ -265,4 +275,5 @@ class PLUpdate(object):
         #epoch_loss.append(sum(batch_loss) / len(batch_loss))
         self.epoch = self.epoch + 1
         self.model.cpu()
+        #return self.model.state_dict(), copy.deepcopy(self.optimizer.state_dict()), sum(class_num), class_num, loss
         return self.model.state_dict(), copy.deepcopy(self.optimizer.state_dict()), sum(class_num), class_num

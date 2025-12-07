@@ -9,7 +9,7 @@ def args_parser():
 
 
 
-    parser.add_argument('--dataset', type=str, choices=['cifar10', 'skin', 'SVHN', 'cifar100', 'fmnist'], default='SVHN',
+    parser.add_argument('--dataset', type=str, choices=['cifar10', 'skin', 'SVHN', 'cifar100', 'fmnist', 'femnist'], default='SVHN',
                         help='dataset used for training')
     parser.add_argument('--model', type=str, default='Res18', help='neural network used in training')
     parser.add_argument('--unsup_num', type=int, default=9, help='number of unsupervised clients')
@@ -47,7 +47,7 @@ def args_parser():
                         help="confidence threshold for pair loss and unsupervised loss")
     parser.add_argument('--deterministic', type=int, default=1, help='whether use deterministic training')
     # 3407 114514
-    parser.add_argument('--seed', type=int, default=114514, help='random seed')
+    parser.add_argument('--seed', type=int, default=1337, help='random seed')
     parser.add_argument('--Pretrained', type=bool, default=False, help='use imagenet pretrained model')
 
     parser.add_argument('--input_sz', type=int, default=32, help='actual input size')
@@ -61,17 +61,21 @@ def args_parser():
                         help='dataset root dir')
     parser.add_argument('--drop_rate', type=int, default=0.2, help='dropout rate')
     parser.add_argument('--ema_consistency', type=int, default=1, help='whether train baseline model')
-    parser.add_argument('--gpu', type=str, default='6', help='GPU to use')
+    parser.add_argument('--gpu', type=str, default='0', help='GPU to use')
     parser.add_argument('--local_ep', type=int, default=1, help='local epoch')
     parser.add_argument('--num_users', type=int, default=10, help='local epoch')
     parser.add_argument('--num_labeled', type=int, default=1, help='local epoch')
     parser.add_argument('--log_file_name', type=str, default=None, help='The log file name')
-    parser.add_argument('--logdir', type=str, default='logs/', help='The log file name')
+    parser.add_argument('--logdir', type=str, default='./logs/', help='The log file name')
     parser.add_argument('--beta', type=float, default=0.5,
                         help='The parameter for the dirichlet distribution for data partitioning')
     parser.add_argument('--partition', type=str, default='noniid', help='the data partitioning strategy')
+    #parser.add_argument('--noise', type=float, default=0, help='how much noise we add to some party')
     parser.add_argument('--datadir', type=str, required=False, default="./data/", help="Data directory")
     parser.add_argument('--out_dim', type=int, default=256, help='the output dimension for the projection layer')
+    parser.add_argument('--n_parties', type=int, default=10,  help='number of workers in a distributed cluster')
+    parser.add_argument('--noise', type=float, default=0, help='how much noise we add to some party')
+    parser.add_argument('--noise_type', type=str, default='level', help='Different level of noise or different space of noise')
     ### tune
     parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
     parser.add_argument('--start_epoch', type=int, default=0, help='start_epoch')
@@ -90,7 +94,7 @@ def args_parser():
                         default=0,
                         type=int,
                         help='number of warm-up epochs for unsupervised loss ramp-up during training'
-                             'set to 0 to disable ramp-up')
+                             'set to 0 to table ramp-up')
 
     parser.add_argument('--lr-step-size',
                         '--learning-rate-step-size',

@@ -228,9 +228,19 @@ def partition_data_allnoniid(dataset, datadir, train_idxs=None, test_idxs=None, 
     else:
         return np.array(X_train), np.array(y_train), np.array(X_test), np.array(y_test)
 
+class AddGaussianNoise(object):
+    def __init__(self, mean=0., std=1.):
+        self.std = std
+        self.mean = mean
+
+    def __call__(self, tensor):
+            return tensor + torch.randn(tensor.size()) * self.std + self.mean
+
+    def __repr__(self):
+        return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
 
 def get_dataloader(args, data_np, label_np, dataset_type, datadir, train_bs, is_labeled=None, data_idxs=None,
-                   is_testing=False, pre_sz=40, input_sz=32):
+                   is_testing=False, pre_sz=40, input_sz=32, noise_level=0):
     if dataset_type == 'SVHN':
         normalize = transforms.Normalize(mean=[0.4376821, 0.4437697, 0.47280442],
                                          std=[0.19803012, 0.20101562, 0.19703614])
@@ -258,6 +268,7 @@ def get_dataloader(args, data_np, label_np, dataset_type, datadir, train_bs, is_
                 [transforms.RandomCrop(size=(input_sz, input_sz)),
                  transforms.RandomHorizontalFlip(p=0.5),
                  transforms.ToTensor(),
+                 AddGaussianNoise(0., noise_level),
                  normalize
                  ])
             ds = dataset.CheXpertDataset(dataset_type, data_np, label_np, pre_sz, pre_sz, lab_trans=trans,
@@ -268,12 +279,14 @@ def get_dataloader(args, data_np, label_np, dataset_type, datadir, train_bs, is_
                 transforms.RandomCrop(size=(input_sz, input_sz)),
                 transforms.RandomHorizontalFlip(p=0.5),
                 transforms.ToTensor(),
+                AddGaussianNoise(0., noise_level),
                 normalize
             ])
             strong_trans = transforms.Compose([
                 transforms.RandomCrop(size=(224, 224)),
                 transforms.RandomHorizontalFlip(p=0.5),
                 transforms.ToTensor(),
+                AddGaussianNoise(0., noise_level),
                 normalize
             ])
 
@@ -283,14 +296,15 @@ def get_dataloader(args, data_np, label_np, dataset_type, datadir, train_bs, is_
                                          data_idxs=data_idxs,
                                          is_labeled=False,
                                          is_testing=False)
-        dl = data.DataLoader(dataset=ds, batch_size=train_bs, drop_last=False, shuffle=True, num_workers=8)
+        dl = data.DataLoader(dataset=ds, batch_size=train_bs,
+                             drop_last=False, shuffle=True, num_workers=16, pin_memory=True)
     else:
         ds = dataset.CheXpertDataset(dataset_type, data_np, label_np, input_sz, input_sz, lab_trans=transforms.Compose([
             # K.RandomCrop((224, 224)),
             transforms.ToTensor(),
             normalize
         ]), is_labeled=True, is_testing=True)
-        dl = data.DataLoader(dataset=ds, batch_size=train_bs, drop_last=False, shuffle=False, num_workers=8)
+        dl = data.DataLoader(dataset=ds, batch_size=train_bs, drop_last=False, shuffle=False, num_workers=16, pin_memory=True)
     return dl, ds
 
 class StrongDataset(Dataset):

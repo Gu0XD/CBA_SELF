@@ -10,6 +10,7 @@ import logging
 #from pytorch_metric_learning import losses
 from networks.models import ModelFedCon
 import torchvision.models as torch_models
+from torchvision.models.resnet import ResNet18_Weights
 import torch.nn as nn
 from validation import epochVal_metrics_test
 from cifar_load import get_dataloader, partition_data, partition_data_allnoniid
@@ -19,7 +20,10 @@ args = args_parser()
 
 def test(epoch, checkpoint, data_test, label_test, n_classes):
     if args.model == 'Res18':
-        net = torch_models.resnet18(pretrained=args.Pretrained)
+        if args.Pretrained:
+            net = torch_models.resnet18(weights=ResNet18_Weights.DEFAULT)
+        else:
+            net = torch_models.resnet18(weights=None)
         net.fc = nn.Linear(net.fc.weight.shape[1], n_classes)
     if len(args.gpu.split(',')) > 1:
         net = torch.nn.DataParallel(net, device_ids=[i for i in range(round(len(args.gpu) / 2))])
@@ -51,8 +55,11 @@ class SupervisedLocalUpdate(object):
         self.data_idx = idxs
         self.max_grad_norm = args.max_grad_norm
         if args.model == 'Res18':
-            net = torch_models.resnet18(pretrained=args.Pretrained)
-            net.fc = nn.Linear(net.fc.weight.shape[1], n_classes)
+            if args.Pretrained:
+                net = torch_models.resnet18(weights=ResNet18_Weights.DEFAULT)
+            else:
+                net = torch_models.resnet18(weights=None)
+        net.fc = nn.Linear(net.fc.weight.shape[1], n_classes)
         if len(args.gpu.split(',')) > 1:
             net = torch.nn.DataParallel(net, device_ids=[i for i in range(round(len(args.gpu) / 2))])
         self.model = net.cuda()
@@ -88,9 +95,9 @@ class SupervisedLocalUpdate(object):
             if args.dataset=='cifar100':
                 s_epoch = 1001
             else:
-                s_epoch = 501
+                s_epoch = 10
         else:
-            s_epoch = 11
+            s_epoch = 9
         for epoch in range(s_epoch):
             self.model.train()
             batch_loss = []

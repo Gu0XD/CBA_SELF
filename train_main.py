@@ -18,17 +18,19 @@ from local_supervised import SupervisedLocalUpdate
 from local_PL import PLUpdate
 from tqdm import trange
 from cifar_load import get_dataloader, partition_data, partition_data_allnoniid
+from Non_IID_bench import partition_data_non_iid
 import torchvision.models as torch_models
+from torchvision.models.resnet import ResNet18_Weights
 import torch.nn as nn
-import timm
+#import timm
 from torchvision.datasets import MNIST, STL10, EMNIST, CIFAR10, CIFAR100, SVHN, FashionMNIST, ImageFolder, DatasetFolder, utils
 
 from torch.utils.tensorboard import SummaryWriter
 
-#os.environ['CUDA_VISIBLE_DEVICES'] = '7'
+#os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 
-from timm.models.vision_transformer import vit_tiny_patch16_224
+#from timm.models.vision_transformer import vit_tiny_patch16_224
 
 
 def split(dataset, num_users):
@@ -58,7 +60,10 @@ def select_samlple(x,y,n_classes):
 
 def test(epoch, checkpoint, data_test, label_test, n_classes):
     if args.model == 'Res18':
-        net = torch_models.resnet18(pretrained=args.Pretrained)
+        if args.Pretrained:
+            net = torch_models.resnet18(weights=ResNet18_Weights.DEFAULT)
+        else:
+            net = torch_models.resnet18(weights=None)
         net.fc = nn.Linear(net.fc.weight.shape[1], n_classes)
     if len(args.gpu.split(',')) > 1:
         net = torch.nn.DataParallel(net, device_ids=[i for i in range(round(len(args.gpu) / 2))])
@@ -81,7 +86,7 @@ def test(epoch, checkpoint, data_test, label_test, n_classes):
     return AUROC_avg, Accus_avg
 
 if __name__ == '__main__':
-    weight_path = '/home/ubuntu/federated_semi_supervised_learning/RSCFed-main/'
+    #weight_path = '/home/ubuntu/federated_semi_supervised_learning/RSCFed-main/'
     args = args_parser()
     supervised_user_id = [0]
     unsupervised_user_id = list(range(len(supervised_user_id), args.unsup_num + len(supervised_user_id)))
@@ -89,17 +94,20 @@ if __name__ == '__main__':
     unsup_num = len(unsupervised_user_id)
     total_num = sup_num + unsup_num
 
-    os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     print(args.gpu)
     torch.cuda.set_device(0)
-    time_current = 'attempt0'
+    time_current = 'attempt5'
     if args.log_file_name is None:
         args.log_file_name = 'log-%s' % (datetime.datetime.now().strftime("%m-%d-%H%M-%S"))
     log_path = args.log_file_name + '.log'
     logging.basicConfig(filename=os.path.join(args.logdir, log_path), level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logger = logging.getLogger()
-    logger.addHandler(logging.StreamHandler(sys.stdout))
+    dataset_name = str(args.dataset)
+    file_handler = logging.FileHandler(f'./log/test.txt')
+    logger.addHandler(file_handler)
+    #logger.addHandler(logging.StreamHandler(sys.stdout))
     logger.info(str(args))
     logger.info(time_current)
     if args.deterministic:
@@ -113,11 +121,33 @@ if __name__ == '__main__':
     if not os.path.isdir('tensorboard'):
         os.mkdir('tensorboard')
 
+    if args.dataset == 'SVHN':
+        if not os.path.isdir('tensorboard/SVHN/' + time_current):
+            os.mkdir('tensorboard/SVHN/' + time_current)
+        writer = SummaryWriter('tensorboard/SVHN/' + time_current)
+
+    if args.dataset == 'cifar10':
+        if not os.path.isdir('tensorboard/cifar10/' + time_current):
+            os.mkdir('tensorboard/cifar10/' + time_current)
+        writer = SummaryWriter('tensorboard/cifar10/' + time_current)
+
+    elif args.dataset == 'cifar100':
+        if not os.path.isdir('tensorboard/cifar100/' + time_current):
+            os.mkdir('tensorboard/cifar100/' + time_current)
+        writer = SummaryWriter('tensorboard/cifar100/' + time_current)
+
+    elif args.dataset == 'skin':
+        if not os.path.isdir('tensorboard/skin/' + time_current):
+            os.mkdir('tensorboard/skin/' + time_current)
+        writer = SummaryWriter('tensorboard/skin/' + time_current)
+
     snapshot_path = 'model/'
     if not os.path.isdir(snapshot_path):
         os.mkdir(snapshot_path)
     if args.dataset == 'SVHN':
         snapshot_path = 'model/SVHN/'
+    if args.dataset == 'cifar10':
+        snapshot_path = 'model/cifar10/'
     if args.dataset == 'cifar100':
         snapshot_path = 'model/cifar100/'
     if args.dataset == 'skin':
@@ -127,20 +157,37 @@ if __name__ == '__main__':
 
     print('==> Reloading data partitioning strategy..')
     assert os.path.isdir('partition_strategy'), 'Error: no partition_strategy directory found!'
+    if args.dataset == 'SVHN':
+        partition = torch.load('partition_strategy/SVHN_noniid_10%labeled.pth')
+        net_dataidx_map = partition['data_partition']
+    #X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data_allnoniid(
+    #    args.dataset, args.datadir, partition=args.partition, n_parties=total_num, beta=args.beta)
+    X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data_non_iid(
+        args.dataset, args.datadir, args.logdir, args.partition, args.n_parties, beta=args.beta)
+    
 
-    partition = torch.load('partition_strategy/SVHN_noniid_10%labeled.pth')
-    net_dataidx_map = partition['data_partition']
-    X_train, y_train, X_test, y_test = partition_data_allnoniid(
-        args.dataset, args.datadir, partition=args.partition, n_parties=total_num, beta=args.beta)
+    if args.dataset == 'SVHN':
+        X_train = X_train.transpose([0, 2, 3, 1])
+        X_test = X_test.transpose([0, 2, 3, 1])
 
-    X_train = X_train.transpose([0, 2, 3, 1])
-    X_test = X_test.transpose([0, 2, 3, 1])
-    n_classes = 10
 
-    print(args.model)
+    if args.dataset == 'cifar10' or args.dataset == 'SVHN':
+        n_classes = 10
+    elif args.dataset == 'cifar100':
+        n_classes = 100
+    elif args.dataset == 'femnist':
+        n_classes = 62
+    elif args.dataset == 'skin':
+        n_classes = 7
+
+    #print(args.model)
+    logger.info("\nmodel: {}".format(args.model))
     if args.model == 'Res18':
-        net_glob = torch_models.resnet18(pretrained=args.Pretrained)
-        net_glob.fc = nn.Linear(net_glob.fc.weight.shape[1], n_classes)
+        if args.Pretrained:
+            net_glob = torch_models.resnet18(weights=ResNet18_Weights.DEFAULT)
+        else:
+            net_glob = torch_models.resnet18(weights=None)
+    net_glob.fc = nn.Linear(net_glob.fc.weight.shape[1], n_classes)
     if args.resume:
         print('==> Resuming from checkpoint..')
         checkpoint = torch.load('warmup/SVHN.pth')
@@ -185,20 +232,20 @@ if __name__ == '__main__':
         if args.opt == 'adam':
             optimizer = torch.optim.Adam(sup_net_locals[i].parameters(), lr=args.base_lr,
                                          betas=(0.9, 0.999), weight_decay=5e-4)
-            optimizer_trans = torch.optim.Adam(sup_net_locals_trans[i].parameters(), lr=0.03,
-                                         betas=(0.9, 0.999), weight_decay=5e-4)
+            #optimizer_trans = torch.optim.Adam(sup_net_locals_trans[i].parameters(), lr=0.03,
+            #                             betas=(0.9, 0.999), weight_decay=5e-4)
         elif args.opt == 'sgd':
             optimizer = torch.optim.SGD(sup_net_locals[i].parameters(), lr=args.base_lr, momentum=0.9,
                                         weight_decay=5e-4)
-            optimizer_trans = torch.optim.SGD(sup_net_locals_trans[i].parameters(), lr=0.03, momentum=0.9,
-                                        weight_decay=5e-4)
+            #optimizer_trans = torch.optim.SGD(sup_net_locals_trans[i].parameters(), lr=0.03, momentum=0.9,
+            #                            weight_decay=5e-4)
         elif args.opt == 'adamw':
             optimizer = torch.optim.AdamW(sup_net_locals[i].parameters(), lr=args.base_lr, weight_decay=0.02)
-            optimizer_trans = torch.optim.AdamW(sup_net_locals_trans[i].parameters(), lr=args.base_lr, weight_decay=0.02)
+            #optimizer_trans = torch.optim.AdamW(sup_net_locals_trans[i].parameters(), lr=args.base_lr, weight_decay=0.02)
         if args.resume:
             optimizer.load_state_dict(checkpoint['sup_optimizers'][i])
         sup_optim_locals.append(copy.deepcopy(optimizer.state_dict()))
-        sup_optim_locals_trans.append(copy.deepcopy(optimizer_trans.state_dict()))
+        #sup_optim_locals_trans.append(copy.deepcopy(optimizer_trans.state_dict()))
 
     # load pseudo labelling trainer
     for i in unsupervised_user_id:
@@ -226,13 +273,17 @@ if __name__ == '__main__':
 
     # supervised training in labeled clients, change com_round if number of labeled clients > 1
     for com_round in trange(1):
-        print("************* Communication round %d begins *************" % com_round)
+        #print("************* Communication round %d begins *************" % com_round)
         #print('upper bound')
         #print(f'upper bound of CNNs')
         w_l = []
         n_l = []
 
         for client_idx in supervised_user_id:
+            noise_level = args.noise
+            if client_idx == args.n_parties - 1:
+                noise_level = 0
+            noise_level = args.noise / (args.n_parties - 1) * client_idx
             loss_locals = []
             clt_this_comm_round = []
             w_per_meta = []
@@ -246,7 +297,7 @@ if __name__ == '__main__':
                                                             args.dataset, args.datadir, args.batch_size,
                                                             is_labeled=True,
                                                             data_idxs=net_dataidx_map[client_idx],
-                                                            pre_sz=args.pre_sz, input_sz=args.input_sz)
+                                                            pre_sz=args.pre_sz, input_sz=args.input_sz, noise_level=noise_level)
             w, loss, op = local.train(args, sup_net_locals[client_idx].state_dict(),
                                                optimizer,
                                       train_dl_local, n_classes, X_test=X_test, y_test=y_test, res=True,stage=1)  # network, loss, optimizer
@@ -287,8 +338,16 @@ if __name__ == '__main__':
     T_higher = 0.1
     T_upper = 0.95
     all_local = []
+
     # load number of classes in labeled clients
-    sup_label = torch.load('partition_strategy/svhn_beta0.8_sup.pth')
+    #sup_label = torch.load('partition_strategy/svhn_beta0.8_sup.pth')
+
+    temp_dic = traindata_cls_counts[0]
+    sup_label = torch.zeros(n_classes, dtype=float)
+    for k, v in traindata_cls_counts[0].items():
+        sup_label[k] = v
+    #sup_label = torch.tensor(list(temp_dic.values()), dtype=float)
+    #print(sup_label)
     temp_sup_label = copy.deepcopy(sup_label)
     temp_sup_label = (temp_sup_label / sum(temp_sup_label))*(n_classes / 10)
     second_class = []
@@ -308,7 +367,8 @@ if __name__ == '__main__':
         class_confident[class_confident >= 0.9] = 0.9
     else:
         class_confident[class_confident >= T_upper] = T_upper
-    print(class_confident)
+    #print(class_confident)
+    logger.info("\nclass_confident:{}".format(class_confident))
     record_accuracy = []
     predict_accuracy = []
     sc = 10
@@ -319,15 +379,23 @@ if __name__ == '__main__':
 
     for com_round in trange(total_epoch):
         temp_p_a = []
-        print("************* Communication round %d begins *************" % com_round)
-        print(f"Threshold base is {T_base}")
-        print(f'second base is {T_lower}')
+        # print("************* Communication round %d begins *************" % com_round)
+        # print(f"Threshold base is {T_base}")
+        # print(f'second base is {T_lower}')
+        logger.info(
+            "************* Communication round {} begins *************".format(com_round))
+        logger.info("\nThreshold base is {}".format(T_base))
+        logger.info("\nsecond base is{}".format(T_lower))
         #print(f'upper bound 0.99')
         local_w = []
         local_num = []
         local_label = torch.zeros(n_classes)
 
         for client_idx in supervised_user_id:
+            noise_level = args.noise
+            if client_idx == args.n_parties - 1:
+                noise_level = 0
+            noise_level = args.noise / (args.n_parties - 1) * client_idx
             loss_locals = []
             clt_this_comm_round = []
             w_per_meta = []
@@ -338,13 +406,15 @@ if __name__ == '__main__':
                                                             args.dataset, args.datadir, args.batch_size,
                                                             is_labeled=True,
                                                             data_idxs=net_dataidx_map[client_idx],
-                                                            pre_sz=args.pre_sz, input_sz=args.input_sz)
+                                                            pre_sz=args.pre_sz, input_sz=args.input_sz, noise_level=noise_level)
             if args.dataset == 'skin':
                 w, loss, op = local.train(args, sup_net_locals[client_idx].state_dict(), optimizer,
                                           train_dl_local, n_classes, X_test=X_test, y_test=y_test, res=True)  # network, loss, optimizer
             else:
                 w, loss, op = local.train(args, sup_net_locals[client_idx].state_dict(), optimizer,
                                           train_dl_local, n_classes, res=True)
+            if com_round % 10 == 0:
+                writer.add_scalar('Supervised loss on sup client %d' %client_idx, loss, global_step=com_round)
 
             local_w.append(w)
             sup_optim_locals[client_idx] = copy.deepcopy(op)
@@ -354,6 +424,10 @@ if __name__ == '__main__':
                 local_num.append(len(net_dataidx_map[client_idx]))
 
         for client_idx in unsupervised_user_id:
+            noise_level = args.noise
+            if client_idx == args.n_parties - 1:
+                noise_level = 0
+            noise_level = args.noise / (args.n_parties - 1) * client_idx
             local = pl_trainer_locals[client_idx - sup_num]
             optimizer = pl_optim_locals[client_idx - sup_num]
             train_dl_local, train_ds_local = get_dataloader(args, X_train[net_dataidx_map[client_idx]],
@@ -361,9 +435,12 @@ if __name__ == '__main__':
                                                             args.dataset, args.datadir, args.batch_size,
                                                             is_labeled=False,
                                                             data_idxs=net_dataidx_map[client_idx],
-                                                            pre_sz=args.pre_sz, input_sz=args.input_sz)
-            w, op, num, train_label= local.train(args, pl_net_locals[client_idx - sup_num].state_dict(), optimizer,
+                                                            pre_sz=args.pre_sz, input_sz=args.input_sz, noise_level=noise_level)
+            w, op, num, train_label = local.train(args, pl_net_locals[client_idx - sup_num].state_dict(), optimizer,
                                       train_dl_local, n_classes, is_train=True, class_confident=class_confident, include_second=include, second_c=second_class, second_h=second_h)  # network, loss, optimizer
+            # if com_round % 10 == 0:
+            #     writer.add_scalar('Unsupervised loss on unsup client %d' %
+            #                   client_idx, loss_unsup, global_step=com_round)
             local_w.append(w)
             pl_optim_locals[client_idx - sup_num] = copy.deepcopy(op)
             local_num.append(num)
@@ -409,18 +486,26 @@ if __name__ == '__main__':
                 print(n_l)
                 w = FedAvg(record_w, w_l, n_l)
                 record_w = copy.deepcopy(w)
-
+        logger.info(
+            "************* Communication round {} ends *************".format(com_round))
 
         net_glob.load_state_dict(w)
         AUROC_avg, Accus_avg = test(com_round, net_glob.state_dict(), X_test, y_test, n_classes)
-        print(args.dataset)
-        print(T_lower, T_base)
+        writer.add_scalar('AUC', AUROC_avg, global_step=com_round)
+        writer.add_scalar('Acc', Accus_avg, global_step=com_round)
+        #print(args.dataset)
+        #print(T_lower, T_base)
+        logger.info("\nT_lower: {}, T_base: {}".format(T_lower, T_base))
         print(f'scaling factor: {sc}')
-        print(AUROC_avg, Accus_avg)
-        print(args.base_lr, args.unsup_lr)
+        #print(AUROC_avg, Accus_avg)
+        logger.info("\nEpoch: {}".format(com_round))
+        logger.info("\nTEST AUROC: {:6f}, TEST Accus: {:6f}"
+                    .format(AUROC_avg, Accus_avg))
+        #print(args.base_lr, args.unsup_lr)
         record_accuracy.append(Accus_avg)
         #print('adding lambda')
-        print(record_accuracy)
+        #print(record_accuracy)
+
         for i in supervised_user_id:
             sup_net_locals[i].load_state_dict(w)
         for i in unsupervised_user_id:
