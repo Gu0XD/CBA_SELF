@@ -29,7 +29,7 @@ def args_parser():
                         type=float,
                         default=5,
                         help="max gradient norm allowed (used for gradient clipping)")
-    parser.add_argument('--rounds', type=int, default=1000, help='local epoch')
+    parser.add_argument('--rounds', type=int, default=100, help='local epoch')
     parser.add_argument('--meta_round', type=int, default=3, help='number of sub-consensus groups')
     parser.add_argument('--w_mul_times', type=int, default=6,
                         help='times of amplifying weight of supervised model when aggregating')

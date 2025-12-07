@@ -9,6 +9,7 @@ from torchvision import transforms
 
 N_CLASSES = 10
 
+
 class CheXpertDataset(Dataset):
     def __init__(self, dataset_type, data_np, label_np, pre_w, pre_h, lab_trans=None, un_trans_wk=None, data_idxs=None,
                  is_labeled=False,
@@ -39,7 +40,8 @@ class CheXpertDataset(Dataset):
         else:
             self.transform = lab_trans
 
-        print('Total # images:{}, labels:{}'.format(len(self.images), len(self.labels)))
+        print('Total # images:{}, labels:{}'.format(
+            len(self.images), len(self.labels)))
 
     def __getitem__(self, index):
         """
@@ -81,10 +83,11 @@ class CheXpertDataset(Dataset):
 
 
 class TransformTwice:
-    def __init__(self, transform):
-        self.transform = transform
+    def __init__(self, weak_trans, strong_trans=None):
+        self.weak_trans = weak_trans
+        self.strong_trans = strong_trans if strong_trans is not None else weak_trans
 
     def __call__(self, inp):
-        out1 = self.transform(inp)
-        out2 = self.transform(inp)
+        out1 = self.weak_trans(inp)
+        out2 = self.strong_trans(inp)
         return [out1, out2]
